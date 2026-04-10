@@ -6,62 +6,75 @@ env = gym.make("FrozenLake-v1")
 state_size = env.observation_space.n
 action_size = env.action_space.n
 
-def q_learning(discount_factor, learning_rate, episodes):
+def q_learning(gamma, alpha, episodes):
     Q = np.zeros((state_size, action_size))
 
-    for episode in range(episodes):
+    for _ in range(episodes):
         state, _ = env.reset()
         done = False
 
         while not done:
             action = env.action_space.sample()
 
-            new_state, reward, done, _, _ = env.step(action)
+            next_state, reward, terminated, truncated, _ = env.step(action)
+            done = terminated or truncated
 
-            Q[state, action] = Q[state, action] + learning_rate * (
-                reward + discount_factor * np.max(Q[new_state]) - Q[state, action]
+            Q[state, action] = Q[state, action] + alpha * (
+                reward + gamma * np.max(Q[next_state]) - Q[state, action]
             )
 
-            state = new_state
+            state = next_state
 
     return Q
 
 
 def test_policy(Q, episodes):
     total_steps = 0
-    total_rewards = 0
+    total_reward = 0
 
     for _ in range(episodes):
         state, _ = env.reset()
         done = False
         steps = 0
-        rewards = 0
+        reward_sum = 0
 
         while not done:
-            action = np.argmax(Q[state])  # best action
-            state, reward, done, _, _ = env.step(action)
+            action = np.argmax(Q[state])
+
+            state, reward, terminated, truncated, _ = env.step(action)
+            done = terminated or truncated
 
             steps += 1
-            rewards += reward
+            reward_sum += reward
 
         total_steps += steps
-        total_rewards += rewards
+        total_reward += reward_sum
 
-    print(f"\nTest for {episodes} episodes:")
     print("Average steps:", total_steps / episodes)
-    print("Average reward:", total_rewards / episodes)
+    print("Average reward:", total_reward / episodes)
 
 
-configs = [
-    (0.5, 0.1),
-    (0.5, 0.01),
-    (0.9, 0.1),
-    (0.9, 0.01)
-]
+configs = [(0.5, 0.1), (0.5, 0.01), (0.9, 0.1), (0.9, 0.01)]
 
 for gamma, alpha in configs:
-    print(f"\nTraining with gamma={gamma}, alpha={alpha}")
+    print("\nGamma:", gamma, "Alpha:", alpha)
+
     Q = q_learning(gamma, alpha, 5000)
 
+    print("Test 50 episodes")
     test_policy(Q, 50)
+
+    print("Test 100 episodes")
     test_policy(Q, 100)
+
+render_env = gym.make("FrozenLake-v1", render_mode="human")
+
+state, _ = render_env.reset()
+done = False
+
+while not done:
+    action = np.argmax(Q[state])
+    state, reward, terminated, truncated, _ = render_env.step(action)
+    done = terminated or truncated
+
+render_env.close()

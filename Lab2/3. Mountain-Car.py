@@ -1,5 +1,6 @@
 import gymnasium as gym
 import numpy as np
+import time
 
 env = gym.make("MountainCar-v0")
 
@@ -10,10 +11,10 @@ high = env.observation_space.high
 
 
 def discretize(state):
+    state = np.array(state)
     ratios = (state - low) / (high - low)
-    state_discrete = (ratios * np.array(bins)).astype(int)
-    state_discrete = np.clip(state_discrete, 0, np.array(bins) - 1)
-    return tuple(state_discrete)
+    ratios = np.clip(ratios, 0, 1)
+    return tuple((ratios * (np.array(bins) - 1)).astype(int))
 
 
 Q = np.zeros((bins[0], bins[1], env.action_space.n))
@@ -32,31 +33,37 @@ for episode in range(episodes):
     steps = 0
 
     while not done:
-        # ε-greedy
+
         if np.random.random() < epsilon:
             action = env.action_space.sample()
         else:
             action = np.argmax(Q[state])
 
-        new_state, reward, terminated, truncated, _ = env.step(action)
+        next_state, reward, terminated, truncated, _ = env.step(action)
         done = terminated or truncated
 
-        new_state = discretize(new_state)
+        next_state = discretize(next_state)
 
         Q[state][action] += alpha * (
-            reward + gamma * np.max(Q[new_state]) - Q[state][action]
+            reward + gamma * np.max(Q[next_state]) - Q[state][action]
         )
 
-        state = new_state
+        state = next_state
         steps += 1
 
-        if steps > 200:   # safety break
+        if steps > 200:
             break
+
+    if episode % 1000 == 0:
+        print("Episode:", episode)
+
 
 
 def test(episodes):
+    print(episodes, "episodes")
+
     total_steps = 0
-    total_rewards = 0
+    total_reward = 0
 
     for _ in range(episodes):
         state, _ = env.reset()
@@ -64,29 +71,49 @@ def test(episodes):
 
         done = False
         steps = 0
-        rewards = 0
+        reward_sum = 0
 
         while not done:
             action = np.argmax(Q[state])
 
-            new_state, reward, terminated, truncated, _ = env.step(action)
+            next_state, reward, terminated, truncated, _ = env.step(action)
             done = terminated or truncated
 
-            state = discretize(new_state)
+            state = discretize(next_state)
 
             steps += 1
-            rewards += reward
+            reward_sum += reward
 
             if steps > 200:
                 break
 
         total_steps += steps
-        total_rewards += rewards
+        total_reward += reward_sum
 
-    print(f"\nTest {episodes} episodes:")
     print("Average steps:", total_steps / episodes)
-    print("Average reward:", total_rewards / episodes)
+    print("Average reward:", total_reward / episodes)
 
 
 test(50)
 test(100)
+
+render_env = gym.make("MountainCar-v0", render_mode="human")
+
+state, _ = render_env.reset()
+state = discretize(state)
+
+done = False
+steps = 0
+
+while not done:
+    action = np.argmax(Q[state])
+
+    next_state, reward, terminated, truncated, _ = render_env.step(action)
+    done = terminated or truncated
+
+    state = discretize(next_state)
+
+    steps += 1
+    time.sleep(0.02)
+
+render_env.close()
